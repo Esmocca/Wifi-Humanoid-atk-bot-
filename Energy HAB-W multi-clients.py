@@ -1,4 +1,6 @@
-# Code Energy HAB-W multi-clients
+# Code HAB-W for multi clients
+# Cek ip setiap wilayah dan perangkat terhubung berbeda-beda 
+# Ganti client_name untuk client kedua atau selanjutnya
 import socket
 import machine
 import time
@@ -39,15 +41,15 @@ def custom_print(text):
     with oled_lock:
         display_on_oled(text)
 
-custom_print(f"{client_name}\nConnecting to Wi-Fi...")
+custom_print(f"{client_name}\nConnecting to\nWi-Fi...")
 while not wlan.isconnected():
     time.sleep(0.1)
 
 custom_print(f"{client_name} connected to Wi-Fi!")
-custom_print("IP Address: " + wlan.ifconfig()[0])
+custom_print("IP Address:\n" + wlan.ifconfig()[0])
 
 # Konfigurasi server
-server_ip = "192.168.32.96"  # IP server yang telah terdeteksi
+server_ip = "192.168.95.96"  # IP server yang telah terdeteksi jika tidak berhasil coba ini "192.168.32.96"
 server_port = 50003
 
 # Pin tombol
@@ -155,4 +157,3 @@ def main():
         time.sleep(0.1)
 
 main()
-

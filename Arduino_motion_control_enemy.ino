@@ -2,6 +2,9 @@
 // Features: 
 // Added pwm servo drivers
 // Disable skill button
+// Weapon atk motion
+// Can't atk while blocking
+
 #include <Adafruit_PWMServoDriver.h>
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
@@ -24,6 +27,8 @@ int damage = 0;
 int hp = 30;
 int deff = 800;
 int atk = 300;
+int enrgy = 30;
+int maxenrgy = 30;
 float critRate = 0.2; // Crit rate 20%
 float critDMG = 1.0; // Crit DMG 100% (default duration * 1.0)
 
@@ -55,6 +60,11 @@ int heal_press_count = 0;
 int heal_state = 0;
 int prev_heal_state = 0;
 
+// Energy management
+unsigned long lastEnergyRegenTime = 0;
+const unsigned long energyRegenInterval = 5000; // Regenerate 10 energy every 5 seconds
+const int energyCostPerAttack = 10;
+
 void setup()
 {
   Serial.begin(9600);
@@ -69,6 +79,7 @@ void setup()
 
   setIdlePosition();
   Serial.println("Start...");
+  setServoAngle(SERVO_SIKUKANAN, 100);;//-kanan +kiri
 }
 
 void setServoAngle(int channel, int angle)
@@ -79,11 +90,11 @@ void setServoAngle(int channel, int angle)
 
 void setIdlePosition()
 {
-  setServoAngle(SERVO_BAHUKANAN, 90);//-kanan +kiri
+  setServoAngle(SERVO_BAHUKANAN, 100);//-kanan +kiri
   setServoAngle(SERVO_TANGANKIRI, 140);//+kiri -kanan
   setServoAngle(SERVO_PUNGGUNG, 110);//+turun -naik
-  setServoAngle(SERVO_SIKUKANAN, 150);;//+kanan -kiri
-  setServoAngle(SERVO_PINGGANG, 90);//+kanan -kiri
+  setServoAngle(SERVO_SIKUKANAN, 100);;//-kanan +kiri
+  setServoAngle(SERVO_PINGGANG, 70);//-kanan +kiri
 }
 
 bool debounceButton(int pin) {
@@ -105,24 +116,6 @@ bool debounceButton(int pin) {
   return button_state == HIGH;
 }
 
-void HealState()
-{
-  heal_state = digitalRead(heal_pin);
-  if (heal_state != prev_heal_state)
-  {
-    if (heal_state == HIGH) {
-      //idle 
-    }else{
-      //button pressed
-      hp++;
-      Serial.print("Healed! Current HP: ");
-      Serial.println(hp);
-    }
-    delay(100);
-  }
-  prev_heal_state = heal_state;
-}
-
 void BlockState() //Blocking menggunakan millis
 {
   block_state = digitalRead(block_pin);
@@ -135,11 +128,13 @@ void BlockState() //Blocking menggunakan millis
 
   if (isBlocking) {
     unsigned long currentTime = millis();
-    
+    isBlockingActive = true;
+    isBlocking = true;
     if (currentTime - lastBlockTime < 1000) {
       setServoAngle(SERVO_TANGANKIRI, 100);
-      setServoAngle(SERVO_BAHUKANAN, 180);
-      setServoAngle(SERVO_SIKUKANAN, 180);;//+kanan -kiri
+      setServoAngle(SERVO_PINGGANG, 60);
+      setServoAngle(SERVO_BAHUKANAN, 100);//-kanan +kiri
+      setServoAngle(SERVO_PUNGGUNG, 110);//+turun -naik
       delay(50);
     } else {
       isBlocking = false;
@@ -153,10 +148,22 @@ void handleAtkState() {
   static int animationIndex = 0;  // Indeks untuk memilih animasi
   button_state = debounceButton(Atk_button);
 
+  if (isBlocking) {
+    Serial.println("Cannot attack while blocking.");
+    return;  // Langsung keluar dari fungsi jika blocking aktif
+  }
+
+  // Check energy level before attacking
   if (button_state == LOW && !isAttacking) {
-    isAttacking = true;
-    lastAtkTime = millis();
-    Serial.println("Attack started...");
+    if (enrgy >= energyCostPerAttack) {
+      isAttacking = true;
+      lastAtkTime = millis();
+      enrgy -= energyCostPerAttack;  // Deduct energy
+      Serial.print("Attack started. Energy left: ");
+      Serial.println(enrgy);
+    } else {
+      Serial.println("Low energy, wait 5s!");
+    }
   }
 
   if (isAttacking) {
@@ -165,15 +172,14 @@ void handleAtkState() {
     switch (animationIndex) {
       case 0:  // Animasi serangan 1
         if (currentTime - lastAtkTime < 200) {
-          setServoAngle(SERVO_PINGGANG, 90);
-          setServoAngle(SERVO_PUNGGUNG, 80);
           setServoAngle(SERVO_BAHUKANAN, 180);
-          setServoAngle(SERVO_SIKUKANAN, 160);;//+kanan -kiri
-        } else if (currentTime - lastAtkTime < 1000) {
-          setServoAngle(SERVO_BAHUKANAN, 80);
+          setServoAngle(SERVO_PINGGANG, 160);
+          setServoAngle(SERVO_PUNGGUNG, 40);
+          setServoAngle(SERVO_BAHUKANAN, 180);
+        } else if (currentTime - lastAtkTime < 800) {
           setServoAngle(SERVO_PINGGANG, 40);
           setServoAngle(SERVO_PUNGGUNG, 80);
-          setServoAngle(SERVO_SIKUKANAN, 90);;//+kanan -kiri
+          setServoAngle(SERVO_BAHUKANAN, 100);//-kanan +kiri
         } else {
           isAttacking = false;
           animationIndex = (animationIndex + 1) % 3;  // Pindah ke animasi berikutnya
@@ -184,14 +190,12 @@ void handleAtkState() {
 
       case 1:  // Animasi serangan 2
         if (currentTime - lastAtkTime < 300) {
-          setServoAngle(SERVO_BAHUKANAN, 80);
-          //setServoAngle(SERVO_TANGANKIRI, 60);
-          setServoAngle(SERVO_PUNGGUNG, 80);
-          setServoAngle(SERVO_PINGGANG, 40);
-        } else if (currentTime - lastAtkTime < 1000) {
-          //setServoAngle(SERVO_TANGANKIRI, 80);
-          setServoAngle(SERVO_PINGGANG, 90);
           setServoAngle(SERVO_BAHUKANAN, 180);
+          setServoAngle(SERVO_PUNGGUNG, 90);
+          setServoAngle(SERVO_PINGGANG, 160);
+        } else if (currentTime - lastAtkTime < 800) {
+          setServoAngle(SERVO_PINGGANG, 60);
+          setServoAngle(SERVO_BAHUKANAN, 100);//-kanan +kiri
         } else {
           isAttacking = false;
           animationIndex = (animationIndex + 1) % 3;  // Pindah ke animasi berikutnya
@@ -202,11 +206,15 @@ void handleAtkState() {
 
       case 2:  // Animasi serangan 3
         if (currentTime - lastAtkTime < 250) {
-          setServoAngle(SERVO_TANGANKIRI, 120);
-          setServoAngle(SERVO_PINGGANG, 90);
-        } else if (currentTime - lastAtkTime < 900) {
-          setServoAngle(SERVO_PINGGANG, 40);
-          setServoAngle(SERVO_TANGANKIRI, 60);
+
+         setServoAngle(SERVO_PINGGANG, 40);
+         setServoAngle(SERVO_SIKUKANAN, 140);;//-kanan +kiri
+        } else if (currentTime - lastAtkTime < 600) {
+
+          setServoAngle(SERVO_PINGGANG, 140);
+          setServoAngle(SERVO_PUNGGUNG, 80);
+          setServoAngle(SERVO_BAHUKANAN, 160);
+          setServoAngle(SERVO_SIKUKANAN, 100);;//-kanan +kiri
         } else {
           isAttacking = false;
           animationIndex = (animationIndex + 1) % 3;  // Pindah ke animasi berikutnya
@@ -221,9 +229,20 @@ void handleAtkState() {
     setIdlePosition();
   }
 }
+void regenerateEnergy() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastEnergyRegenTime >= energyRegenInterval) {
+    if (enrgy < maxenrgy) {
+      enrgy = min(enrgy + 10, maxenrgy);  // Regenerate 10 energy, not exceeding max energy
+      Serial.print("Energy regenerated. Current energy: ");
+      Serial.println(enrgy);
+    }
+    lastEnergyRegenTime = currentTime;
+  }
+}
 
 void loop() {
-  HealState();
   BlockState();
+  regenerateEnergy();
   handleAtkState();
 }

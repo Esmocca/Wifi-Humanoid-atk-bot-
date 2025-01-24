@@ -1,6 +1,8 @@
 # Code HAB-W for multi clients
 # Cek ip setiap wilayah dan perangkat terhubung berbeda-beda 
 # Ganti client_name untuk client kedua atau selanjutnya
+# Atk button disabled while blocking
+
 import socket
 import machine
 import time
@@ -10,7 +12,7 @@ import _thread
 from machine import Pin, I2C
 
 # Inisiasi nama klien
-client_name = "Griffith"  # Ganti dengan "Client2" untuk klien kedua
+client_name = "Stellar"  # Ganti dengan "Client2" untuk klien kedua
 
 # Konfigurasi Wi-Fi
 ssid = "Alamak"
@@ -65,6 +67,7 @@ energy_max = 30
 energy_regen_rate = 10
 energy_regen_interval = 5  # Interval regenerasi energi dalam detik
 robot_alive = True
+isblocking = False  # Status blocking
 
 # Fungsi koneksi ke server
 def connect_to_server():
@@ -81,7 +84,7 @@ def connect_to_server():
 
 # Fungsi utama
 def main():
-    global hp, atk, defense, energy, robot_alive
+    global hp, atk, defense, energy, robot_alive, isblocking
     client_socket = connect_to_server()
     custom_print(f"{client_name}\nWait 5 seconds to boot")
 
@@ -130,8 +133,15 @@ def main():
                 custom_print(f"Receive error: {e}")
                 break
 
-        # Mengirim data ke server jika tombol atk ditekan
-        if atk_pin.value() == 0 and atk_button_released:
+        # Periksa tombol BLOCK
+        if block_pin.value() == 0:
+            isblocking = True
+            custom_print("Blocking attack!")
+        else:
+            isblocking = False
+
+        # Mengirim data ke server jika tombol atk ditekan dan tidak dalam mode blocking
+        if not isblocking and atk_pin.value() == 0 and atk_button_released:
             if energy >= 10:  # Periksa apakah energi cukup
                 if time.ticks_diff(time.ticks_ms(), atk_last_press) > 1000:
                     try:
@@ -149,10 +159,6 @@ def main():
         # Memastikan tombol dilepaskan sebelum bisa mendeteksi penekanan berikutnya
         if atk_pin.value() == 1:
             atk_button_released = True
-
-        # Cek tombol BLOCK
-        if block_pin.value() == 0:
-            custom_print("Blocking attack!")
 
         time.sleep(0.1)
 

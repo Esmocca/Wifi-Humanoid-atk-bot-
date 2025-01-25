@@ -1,7 +1,9 @@
 # Code HAB-W for multi clients
-# Cek ip setiap wilayah dan perangkat terhubung berbeda-beda 
-# Ganti client_name untuk client kedua atau selanjutnya
+# Identify your hp based on region
+# Change client_name for client 2 or else 
 # Atk button disabled while blocking
+# Redled for hp indicator & atk received
+# Blocking consume energy by -1 of current energy
 
 import socket
 import machine
@@ -57,6 +59,7 @@ server_port = 50003
 # Pin tombol
 atk_pin = Pin(14, Pin.IN, Pin.PULL_UP)
 block_pin = Pin(15, Pin.IN, Pin.PULL_UP)
+rled_pin = Pin(5, Pin.OUT)  # LED merah mati saat inisialisasi
 
 # Status robot
 hp = 100
@@ -86,7 +89,8 @@ def connect_to_server():
 def main():
     global hp, atk, defense, energy, robot_alive, isblocking
     client_socket = connect_to_server()
-    custom_print(f"{client_name}\nWait 5 seconds to boot")
+    #custom_print(f"{client_name}\nWait 5 seconds\nto boot...")
+    #time.sleep(5)
 
     atk_last_press = 0  # Waktu terakhir tombol atk ditekan
     atk_button_released = True  # Status tombol atk
@@ -94,6 +98,7 @@ def main():
 
     while robot_alive:
         # Regenerasi energi
+        rled_pin.value(0)
         current_time = time.ticks_ms()
         if time.ticks_diff(current_time, last_energy_regen) >= energy_regen_interval * 1000:
             if energy < energy_max:
@@ -110,13 +115,16 @@ def main():
         try:
             data = client_socket.recv(1024)
             if data:
-                decoded_data = data.decode().strip()
+                decoded_data = data.decode().strip() #Mnerima sinyal atk
                 custom_print(f"Received: {decoded_data}")
+                rled_pin.value(1)
+                time.sleep(0.02)
+                rled_pin.value(0)
 
                 if "Atk" in decoded_data:
                     try:
                         attack_received = int(decoded_data.split()[1])
-                        if block_pin.value() == 0:
+                        if isblocking:
                             custom_print("Attack blocked!")
                         else:
                             damage = max((attack_received * (100 - defense)) // 100, 0)
@@ -124,6 +132,7 @@ def main():
                             custom_print(f"HP Remaining: {hp}")
                             if hp <= 0:
                                 robot_alive = False
+                                rled_pin.value(1) # Mengatur status LED mera
                                 custom_print("You're defeated!")
                                 display_on_oled("You're defeated!")
                     except ValueError:
@@ -135,8 +144,13 @@ def main():
 
         # Periksa tombol BLOCK
         if block_pin.value() == 0:
-            isblocking = True
-            custom_print("Blocking attack!")
+            if energy > 0:
+                isblocking = True
+                energy -= 1  # Konsumsi energi saat tombol block ditekan
+                custom_print(f"Blocking attack!")
+            else:
+                isblocking = False
+                custom_print("Low Energy!")
         else:
             isblocking = False
 
@@ -163,3 +177,5 @@ def main():
         time.sleep(0.1)
 
 main()
+
+

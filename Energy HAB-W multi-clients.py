@@ -1,5 +1,5 @@
 # Code HAB-W for multi clients
-# Identify your hp based on region
+# Identify your ip based on region
 # Change client_name for client 2 or else 
 # Atk button disabled while blocking
 # Redled for hp indicator & atk received
